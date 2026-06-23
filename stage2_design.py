@@ -24,7 +24,7 @@ Output EXACT JSON:
 def design_system(intent: dict) -> dict:
     print("🏗️ Stage 2: Designing system architecture...")
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",  # Or "gpt-4o-mini" if using OpenAI
+       model="llama-3.1-8b-instant",  # Or "gpt-4o-mini" if using OpenAI
         messages=[
             {"role": "user", "content": DESIGN_PROMPT.format(intent_json=json.dumps(intent))}
         ],

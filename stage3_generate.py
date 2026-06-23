@@ -1,5 +1,5 @@
 import json
-from concurrent.futures import ThreadPoolExecutor
+import time
 from config import client
 
 # ==========================
@@ -94,70 +94,83 @@ Example:
 """
 
 # ==========================
-# Generation functions
+# Helper: API call with retry
+# ==========================
+
+def call_with_retry(prompt: str, design_json: str, max_retries: int = 3):
+    """Calls the API with exponential backoff retry logic."""
+    for attempt in range(max_retries):
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",  # Higher rate limit than 70B
+                messages=[{"role": "user", "content": prompt.format(design_json=design_json)}],
+                temperature=0.2,
+                response_format={"type": "json_object"}
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception as e:
+            if "429" in str(e) or "Rate limit" in str(e):
+                wait_time = (2 ** attempt) * 5  # 5, 10, 20 seconds
+                print(f"      ⏳ Rate limit hit, waiting {wait_time}s... (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                raise e
+    raise Exception("Max retries exceeded for API call")
+
+# ==========================
+# Generation functions (sequential)
 # ==========================
 
 def generate_db(design: dict) -> dict:
     print("  📊 Generating DB schema...")
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": DB_PROMPT.format(design_json=json.dumps(design))}],
-        temperature=0.2,
-        response_format={"type": "json_object"}
-    )
-    return json.loads(response.choices[0].message.content)
+    design_json = json.dumps(design)
+    result = call_with_retry(DB_PROMPT, design_json)
+    print("  ✅ DB schema done")
+    return result
 
 def generate_api(design: dict) -> dict:
     print("  🌐 Generating API schema...")
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": API_PROMPT.format(design_json=json.dumps(design))}],
-        temperature=0.2,
-        response_format={"type": "json_object"}
-    )
-    return json.loads(response.choices[0].message.content)
+    design_json = json.dumps(design)
+    result = call_with_retry(API_PROMPT, design_json)
+    print("  ✅ API schema done")
+    return result
 
 def generate_ui(design: dict) -> dict:
     print("  🖥️  Generating UI schema...")
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": UI_PROMPT.format(design_json=json.dumps(design))}],
-        temperature=0.2,
-        response_format={"type": "json_object"}
-    )
-    return json.loads(response.choices[0].message.content)
+    design_json = json.dumps(design)
+    result = call_with_retry(UI_PROMPT, design_json)
+    print("  ✅ UI schema done")
+    return result
 
 def generate_auth(design: dict) -> dict:
     print("  🔐 Generating Auth schema...")
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": AUTH_PROMPT.format(design_json=json.dumps(design))}],
-        temperature=0.2,
-        response_format={"type": "json_object"}
-    )
-    return json.loads(response.choices[0].message.content)
+    design_json = json.dumps(design)
+    result = call_with_retry(AUTH_PROMPT, design_json)
+    print("  ✅ Auth schema done")
+    return result
 
 # ==========================
-# Master function: parallel generation
+# Master function: sequential generation (to avoid rate limits)
 # ==========================
 
 def generate_all_schemas(design: dict) -> dict:
     """
-    Generates DB, API, UI, Auth schemas in parallel.
+    Generates DB, API, UI, Auth schemas sequentially.
     Returns a dictionary with keys: 'db', 'api', 'ui', 'auth'
     """
-    print("\n🚀 Stage 3: Generating schemas in parallel...")
+    print("\n🚀 Stage 3: Generating schemas sequentially (to avoid rate limits)...")
     
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        future_db = executor.submit(generate_db, design)
-        future_api = executor.submit(generate_api, design)
-        future_ui = executor.submit(generate_ui, design)
-        future_auth = executor.submit(generate_auth, design)
-        
-        db = future_db.result()
-        api = future_api.result()
-        ui = future_ui.result()
-        auth = future_auth.result()
+    # Sequential calls with delays between them
+    db = generate_db(design)
+    time.sleep(1.5)
+    
+    api = generate_api(design)
+    time.sleep(1.5)
+    
+    ui = generate_ui(design)
+    time.sleep(1.5)
+    
+    auth = generate_auth(design)
     
     print("✅ All schemas generated.\n")
     return {"db": db, "api": api, "ui": ui, "auth": auth}
