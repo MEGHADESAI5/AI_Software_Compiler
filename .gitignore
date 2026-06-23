@@ -16,8 +16,7 @@ build/
 .env.local
 .env.*.local
 
-# Secrets
-config.py  
+
 
 # Evaluation results (optional, but can be committed)
 evaluation_results_*.json
